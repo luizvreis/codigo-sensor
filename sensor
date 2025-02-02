@@ -1,0 +1,82 @@
+const int hallPin = 2;  // Pino onde o sensor de efeito Hall está conectado
+const float diametroPneu = 0.7;  // Diâmetro do pneu em metros
+const float pi = 3.1416;  // Valor de pi para o cálculo da circunferência
+
+unsigned long tempoUltimaVolta = 0;  // Armazena o tempo do último clique
+unsigned long tempoTotal = 0;  // Tempo total acumulado
+unsigned long tempoEntreVoltas = 0;  // Tempo entre a última e a próxima volta
+int contadorVoltas = 0;  // Contador de voltas
+float distanciaTotal = 0.0;  // Distância total percorrida em metros
+float velocidadeInstantanea = 0.0;  // Velocidade instantânea em km/h
+float velocidadeMedia = 0.0;  // Velocidade média em km/h
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(hallPin, INPUT);  // Configura o pino do sensor de efeito Hall como entrada
+  Serial.println("Sistema de Medição de Velocidade por Sensor de Efeito Hall");
+  
+  // Inicializa tempoUltimaVolta com o tempo atual
+  tempoUltimaVolta = millis();
+}
+
+void loop() {
+  // Verifica se o sensor de efeito Hall foi ativado (detecção do ímã)
+  if (digitalRead(hallPin) == LOW) {  // Supondo que o sensor envia um sinal LOW quando o ímã passa
+    // Aguarda um tempo para evitar múltiplas leituras rápidas (debounce)
+    delay(200);  // Tempo de debounce
+
+    unsigned long tempoAgora = millis();  // Obtém o tempo atual
+
+    // Se não for a primeira volta, calcula o tempo entre as voltas
+    if (tempoUltimaVolta > 0) {
+      // Calcula o tempo entre a última e a atual volta
+      tempoEntreVoltas = tempoAgora - tempoUltimaVolta;
+
+      // Calcula a distância percorrida para a volta
+      float circunferencia = pi * diametroPneu;  // Cálculo da circunferência
+      distanciaTotal += circunferencia;  // Acumula a distância total percorrida
+
+      // Acumula o tempo total
+      tempoTotal += tempoEntreVoltas;
+
+      // Calcula a velocidade instantânea (em metros por segundo)
+      if (tempoEntreVoltas > 0) {
+        velocidadeInstantanea = circunferencia / (tempoEntreVoltas / 1000.0);  // Velocidade em m/s
+        
+        // Converte para km/h
+        velocidadeInstantanea *= 3.6;
+      }
+
+      // Calcula a velocidade média
+      if (tempoTotal > 0) {
+        // Converte tempo total de milissegundos para segundos
+        float tempoTotalSegundos = tempoTotal / 1000.0;
+        
+        // Calcula a velocidade média (em m/s)
+        float velocidadeMediaMs = distanciaTotal / tempoTotalSegundos;
+
+        // Converte para km/h
+        velocidadeMedia = velocidadeMediaMs * 3.6;
+      }
+
+      // Exibe as informações no Serial Monitor
+      Serial.print("Voltas: ");
+      Serial.print(contadorVoltas);
+      Serial.print(" | Distância Total: ");
+      Serial.print(distanciaTotal);
+      Serial.print(" m | Velocidade Instantânea: ");
+      Serial.print(velocidadeInstantanea, 2);
+      Serial.print(" km/h | Velocidade Média: ");
+      Serial.print(velocidadeMedia, 2);
+      Serial.println(" km/h");
+
+      contadorVoltas++;  // Incrementa o contador de voltas
+    }
+
+    // Atualiza o tempo da última volta
+    tempoUltimaVolta = tempoAgora;
+  }
+
+  delay(50);  // Atraso para garantir uma leitura estável do sensor
+}
+
