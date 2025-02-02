@@ -1,0 +1,119 @@
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
+
+const char* ssid = "YOUR_SSID";          // Substitua pelo nome da sua rede Wi-Fi
+const char* password = "YOUR_PASSWORD";  // Substitua pela sua senha Wi-Fi
+
+const int hallPin = D2;  // Pino do sensor de efeito Hall (D2 no ESP8266)
+const float diametroPneu = 0.7;  // Diâmetro do pneu em metros
+const float pi = 3.1416;  // Valor de pi para o cálculo da circunferência
+
+unsigned long tempoUltimaVolta = 0;
+unsigned long tempoTotal = 0;
+unsigned long tempoEntreVoltas = 0;
+int contadorVoltas = 0;
+float distanciaTotal = 0.0;
+float velocidadeInstantanea = 0.0;
+float velocidadeMedia = 0.0;
+
+ESP8266WebServer server(80);  // Porta 80 (padrão para HTTP)
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(hallPin, INPUT);
+
+  // Conecta-se à rede Wi-Fi
+  WiFi.begin(ssid, password);
+  Serial.println("Conectando ao Wi-Fi");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.print(".");
+  }
+
+  Serial.println("Conectado ao Wi-Fi");
+  Serial.println(WiFi.localIP());
+
+  // Inicia o servidor web
+  server.on("/", HTTP_GET, handleRoot);  // Página inicial
+  server.on("/data", HTTP_GET, handleData);  // Rota para obter dados em JSON
+
+  server.begin();
+  Serial.println("Servidor Web Iniciado");
+}
+
+void loop() {
+  // Verifica se o sensor de efeito Hall detectou um ímã (sinal LOW)
+  if (digitalRead(hallPin) == LOW) {
+    unsigned long tempoAgora = millis();
+
+    // Debounce: Ignora novas detecções por 200 ms
+    if (tempoAgora - tempoUltimaVolta > 200) {
+      if (tempoUltimaVolta > 0) {
+        tempoEntreVoltas = tempoAgora - tempoUltimaVolta;
+
+        // Verifica se o tempo entre voltas é razoável (entre 100 ms e 10 segundos)
+        if (tempoEntreVoltas > 100 && tempoEntreVoltas < 10000) {
+          float circunferencia = pi * diametroPneu;
+          distanciaTotal += circunferencia;
+
+          tempoTotal += tempoEntreVoltas;
+
+          // Calcula a velocidade instantânea (em km/h)
+          velocidadeInstantanea = circunferencia / (tempoEntreVoltas / 1000.0) * 3.6;
+
+          // Calcula a velocidade média (em km/h)
+          if (tempoTotal > 0) {
+            float tempoTotalSegundos = tempoTotal / 1000.0;
+            float velocidadeMediaMs = distanciaTotal / tempoTotalSegundos;
+            velocidadeMedia = velocidadeMediaMs * 3.6;
+          }
+
+          contadorVoltas++;
+        }
+      }
+
+      tempoUltimaVolta = tempoAgora;
+    }
+  }
+
+  // Verifica se a conexão Wi-Fi foi perdida e tenta reconectar
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("Conexão Wi-Fi perdida. Tentando reconectar...");
+    WiFi.reconnect();
+  }
+
+  server.handleClient();  // Processa as requisições HTTP do cliente
+}
+
+// Função para exibir a página HTML
+void handleRoot() {
+  String html = "<html><body>";
+  html += "<h1>Monitoramento de Velocidade da Roda</h1>";
+  html += "<p>Voltas: <span id='voltas'>" + String(contadorVoltas) + "</span></p>";
+  html += "<p>Distância Total: <span id='distancia'>" + String(distanciaTotal) + "</span> metros</p>";
+  html += "<p>Velocidade Instantânea: <span id='velocidade'>" + String(velocidadeInstantanea) + "</span> km/h</p>";
+  html += "<p>Velocidade Média: <span id='velocidadeMedia'>" + String(velocidadeMedia) + "</span> km/h</p>";
+  html += "<script>setInterval(function() {";
+  html += "fetch('/data').then(response => response.json()).then(data => {";
+  html += "document.getElementById('voltas').innerText = data.voltas;";
+  html += "document.getElementById('distancia').innerText = data.distancia;";
+  html += "document.getElementById('velocidade').innerText = data.velocidade;";
+  html += "document.getElementById('velocidadeMedia').innerText = data.velocidadeMedia;";
+  html += "});}, 1000);</script>";  // Atualiza os dados a cada 1 segundo
+  html += "</body></html>";
+
+  server.send(200, "text/html", html);
+}
+
+// Função para retornar os dados em formato JSON
+void handleData() {
+  String json = "{";
+  json += "\"voltas\":" + String(contadorVoltas) + ",";
+  json += "\"distancia\":" + String(distanciaTotal) + ",";
+  json += "\"velocidade\":" + String(velocidadeInstantanea) + ",";
+  json += "\"velocidadeMedia\":" + String(velocidadeMedia);
+  json += "}";
+
+  server.send(200, "application/json", json);
+}
