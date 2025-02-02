@@ -1,4 +1,4 @@
-const int hallPin = 2;  // Pino onde o sensor de efeito Hall está conectado
+const int hallPin = D2;  // Pino D2 no ESP8266 (GPIO4)
 const float diametroPneu = 0.7;  // Diâmetro do pneu em metros
 const float pi = 3.1416;  // Valor de pi para o cálculo da circunferência
 
@@ -11,7 +11,7 @@ float velocidadeInstantanea = 0.0;  // Velocidade instantânea em km/h
 float velocidadeMedia = 0.0;  // Velocidade média em km/h
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(115200);  // Inicia a comunicação serial
   pinMode(hallPin, INPUT);  // Configura o pino do sensor de efeito Hall como entrada
   Serial.println("Sistema de Medição de Velocidade por Sensor de Efeito Hall");
   
@@ -79,4 +79,3 @@ void loop() {
 
   delay(50);  // Atraso para garantir uma leitura estável do sensor
 }
-
