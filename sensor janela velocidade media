@@ -1,0 +1,60 @@
+const int intervaloMedia = 10000;  // Intervalo de tempo para calcular a velocidade média (10 segundos)
+unsigned long ultimoCalculoMedia = 0;  // Armazena o último momento em que a velocidade média foi calculada
+float distanciaParcial = 0.0;  // Distância percorrida no intervalo de tempo
+unsigned long tempoParcial = 0;  // Tempo decorrido no intervalo de tempo
+
+void loop() {
+  // Verifica se o sensor de efeito Hall foi ativado (detecção do ímã)
+  if (digitalRead(hallPin) == LOW) {
+    unsigned long tempoAgora = millis();
+
+    // Debounce: verifica se passou tempo suficiente desde a última detecção
+    if (tempoAgora - tempoUltimaVolta > 100) {
+      if (tempoUltimaVolta > 0) {
+        tempoEntreVoltas = tempoAgora - tempoUltimaVolta;
+
+        // Calcula a distância percorrida para a volta
+        float circunferencia = pi * diametroPneu;
+        distanciaTotal += circunferencia;
+        distanciaParcial += circunferencia;  // Acumula a distância no intervalo
+
+        // Acumula o tempo total e o tempo parcial
+        tempoTotal += tempoEntreVoltas;
+        tempoParcial += tempoEntreVoltas;
+
+        // Calcula a velocidade instantânea
+        if (tempoEntreVoltas > 0) {
+          velocidadeInstantanea = (circunferencia / (tempoEntreVoltas / 1000.0)) * 3.6;
+        }
+
+        // Calcula a velocidade média no intervalo de tempo
+        if (tempoAgora - ultimoCalculoMedia >= intervaloMedia) {
+          if (tempoParcial > 0) {
+            velocidadeMedia = (distanciaParcial / (tempoParcial / 1000.0)) * 3.6;
+          }
+
+          // Reinicia as variáveis para o próximo intervalo
+          distanciaParcial = 0.0;
+          tempoParcial = 0;
+          ultimoCalculoMedia = tempoAgora;
+        }
+
+        // Exibe as informações no Serial Monitor
+        Serial.print("Voltas: ");
+        Serial.print(contadorVoltas);
+        Serial.print(" | Distância Total: ");
+        Serial.print(distanciaTotal, 2);
+        Serial.print(" m | Velocidade Instantânea: ");
+        Serial.print(velocidadeInstantanea, 2);
+        Serial.print(" km/h | Velocidade Média (últimos 10s): ");
+        Serial.print(velocidadeMedia, 2);
+        Serial.println(" km/h");
+
+        contadorVoltas++;
+      }
+
+      // Atualiza o tempo da última volta
+      tempoUltimaVolta = tempoAgora;
+    }
+  }
+}
