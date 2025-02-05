@@ -1,4 +1,4 @@
-const int intervaloMedia = 10000;  // Intervalo de tempo para calcular a velocidade média (10 segundos)
+const int intervaloMedia = 5000;  // Intervalo de tempo para calcular a velocidade média (5 segundos)
 unsigned long ultimoCalculoMedia = 0;  // Armazena o último momento em que a velocidade média foi calculada
 float distanciaParcial = 0.0;  // Distância percorrida no intervalo de tempo
 unsigned long tempoParcial = 0;  // Tempo decorrido no intervalo de tempo
