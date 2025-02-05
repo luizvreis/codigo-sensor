@@ -1,0 +1,128 @@
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
+
+// Configuração do ponto de acesso
+const char *ssid = "PedalPro";          // Nome da rede Wi-Fi criada pelo ESP8266
+const char *password = "PedalPro123";   // Senha da rede Wi-Fi (mínimo 8 caracteres)
+
+// Configurações do sensor
+const int hallPin = D4;  // Pino do sensor de efeito Hall (D4 no ESP8266)
+const float diametroPneu = 0.7;  // Diâmetro do pneu em metros
+const float pi = 3.1416;  // Valor de pi para o cálculo da circunferência
+
+// Variáveis para medição de velocidade e distância
+unsigned long tempoUltimaVolta = 0;  // Tempo da última volta
+unsigned long tempoEntreVoltas = 0;  // Tempo entre as voltas
+unsigned long tempoTotal = 0;  // Tempo total acumulado
+int contadorVoltas = 0;  // Contador de voltas
+float distanciaTotal = 0.0;  // Distância total percorrida
+float velocidadeInstantanea = 0.0;  // Velocidade instantânea
+float velocidadeMedia = 0.0;  // Velocidade média
+
+// Intervalo para cálculo da velocidade média
+const int intervaloMedia = 5000;  // Intervalo de 5 segundos
+unsigned long ultimoCalculoMedia = 0;  // Último cálculo da velocidade média
+float distanciaParcial = 0.0;  // Distância percorrida no intervalo
+unsigned long tempoParcial = 0;  // Tempo decorrido no intervalo
+
+
+ESP8266WebServer server(80);  // Porta 80 (padrão para HTTP)
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(hallPin, INPUT);
+
+  // Configura o ESP8266 como ponto de acesso
+  WiFi.softAP(ssid, password);
+  Serial.println("Ponto de acesso criado");
+
+  // Exibe o endereço IP do ponto de acesso
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("Endereço IP do AP: ");
+  Serial.println(IP);
+
+  // Inicia o servidor web
+  server.on("/", HTTP_GET, handleRoot);  // Página inicial
+  server.on("/data", HTTP_GET, handleData);  // Rota para obter dados em JSON
+
+  server.begin();
+  Serial.println("Servidor Web Iniciado");
+}
+
+void loop() {
+  // Verifica se o sensor de efeito Hall foi ativado (detecção do ímã)
+  if (digitalRead(hallPin) == LOW) {
+    unsigned long tempoAgora = millis();
+
+    // Debounce: verifica se passou tempo suficiente desde a última detecção
+    if (tempoAgora - tempoUltimaVolta > 100) {
+      if (tempoUltimaVolta > 0) {
+        tempoEntreVoltas = tempoAgora - tempoUltimaVolta;
+
+        // Calcula a distância percorrida para a volta
+        float circunferencia = pi * diametroPneu;
+        distanciaTotal += circunferencia;
+        distanciaParcial += circunferencia;  // Acumula a distância no intervalo
+
+        // Acumula o tempo total e o tempo parcial
+        tempoTotal += tempoEntreVoltas;
+        tempoParcial += tempoEntreVoltas;
+
+        // Calcula a velocidade instantânea
+        if (tempoEntreVoltas > 0) {
+          velocidadeInstantanea = (circunferencia / (tempoEntreVoltas / 1000.0)) * 3.6;
+        }
+
+        // Calcula a velocidade média no intervalo de tempo
+        if (tempoAgora - ultimoCalculoMedia >= intervaloMedia) {
+          if (tempoParcial > 0) {
+            velocidadeMedia = (distanciaParcial / (tempoParcial / 1000.0)) * 3.6;
+          }
+
+          // Reinicia as variáveis para o próximo intervalo
+          distanciaParcial = 0.0;
+          tempoParcial = 0;
+          ultimoCalculoMedia = tempoAgora;
+        }
+
+        contadorVoltas++;
+      }
+
+      // Atualiza o tempo da última volta
+      tempoUltimaVolta = tempoAgora;
+    }
+  }
+  server.handleClient();  // Processa as requisições HTTP do cliente
+}
+
+// Função para exibir a página HTML
+void handleRoot() {
+  String html = "<html><body>";
+  html += "<h1>Monitoramento de Velocidade da Roda</h1>";
+  html += "<p>Voltas: <span id='voltas'>" + String(contadorVoltas) + "</span></p>";
+  html += "<p>Distância Total: <span id='distancia'>" + String(distanciaTotal) + "</span> metros</p>";
+  html += "<p>Velocidade Instantânea: <span id='velocidade'>" + String(velocidadeInstantanea) + "</span> km/h</p>";
+  html += "<p>Velocidade Média: <span id='velocidadeMedia'>" + String(velocidadeMedia) + "</span> km/h</p>";
+  html += "<script>setInterval(function() {";
+  html += "fetch('/data').then(response => response.json()).then(data => {";
+  html += "document.getElementById('voltas').innerText = data.voltas;";
+  html += "document.getElementById('distancia').innerText = data.distancia;";
+  html += "document.getElementById('velocidade').innerText = data.velocidade;";
+  html += "document.getElementById('velocidadeMedia').innerText = data.velocidadeMedia;";
+  html += "});}, 1000);</script>";  // Atualiza os dados a cada 1 segundo
+  html += "</body></html>";
+
+  server.send(200, "text/html", html);
+}
+
+// Função para retornar os dados em formato JSON
+void handleData() {
+  String json = "{";
+  json += "\"voltas\":" + String(contadorVoltas) + ",";
+  json += "\"distancia\":" + String(distanciaTotal) + ",";
+  json += "\"velocidade\":" + String(velocidadeInstantanea) + ",";
+  json += "\"velocidadeMedia\":" + String(velocidadeMedia);
+  json += "}";
+
+  server.send(200, "application/json", json);
+}
